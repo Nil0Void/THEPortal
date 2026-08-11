@@ -1,0 +1,131 @@
+-- Services & Local Variables
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local Combat = Remotes:WaitForChild("Combat")
+local RequestMeleeHits = Combat:WaitForChild("RequestMeleeHits")
+local MobsFolder = workspace:WaitForChild("Mobs"):WaitForChild("Active")
+
+local isAttacking = false
+local currentMobList = {}
+
+-- GUI Setup (Mobile Friendly & Draggable)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MobAttackerGui"
+ScreenGui.ResetOnSpawn = false
+
+local success, _ = pcall(function()
+    ScreenGui.Parent = CoreGui
+end)
+if not success then
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Size = UDim2.new(0, 130, 0, 50)
+ToggleButton.Position = UDim2.new(0.05, 0, 0.4, 0)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+ToggleButton.Text = "AUTO HIT: OFF"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 14
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 10)
+UICorner.Parent = ToggleButton
+
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Thickness = 2
+UIStroke.Color = Color3.fromRGB(255, 255, 255)
+UIStroke.Parent = ToggleButton
+
+-- Make Button Draggable for Mobile Users
+local dragging, dragInput, dragStart, startPos
+
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    ToggleButton.Position = UDim2.new(
+        startPos.X.Scale, startPos.X.Offset + delta.X,
+        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+    )
+end
+
+ToggleButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = ToggleButton.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+ToggleButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        updateInput(input)
+    end
+end)
+
+-- 1-Second Refresh Task to Fetch Mobs
+task.spawn(function()
+    while true do
+        if isAttacking then
+            local newList = {}
+            for _, mob in ipairs(MobsFolder:GetChildren()) do
+                table.insert(newList, mob.Name)
+            end
+            currentMobList = newList
+        end
+        task.wait(1)
+    end
+end)
+
+-- Continuous Hit Loop (Sends all stacked mob names at once with no delay)
+task.spawn(function()
+    while true do
+        if isAttacking and #currentMobList > 0 then
+            local args = {
+                currentMobList
+            }
+            RequestMeleeHits:FireServer(unpack(args))
+        end
+        RunService.RenderStepped:Wait()
+    end
+end)
+
+-- Toggle Action
+ToggleButton.MouseButton1Click:Connect(function()
+    isAttacking = not isAttacking
+    
+    if isAttacking then
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 220, 50)
+        ToggleButton.Text = "AUTO HIT: ON"
+        
+        -- Immediate initial scan upon enabling
+        local initialList = {}
+        for _, mob in ipairs(MobsFolder:GetChildren()) do
+            table.insert(initialList, mob.Name)
+        end
+        currentMobList = initialList
+    else
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+        ToggleButton.Text = "AUTO HIT: OFF"
+        currentMobList = {}
+    end
+end)
