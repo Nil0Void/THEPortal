@@ -14,37 +14,19 @@ local RequestMeleeHits = Combat:WaitForChild("RequestMeleeHits")
 local MobsFolder = workspace:WaitForChild("Mobs"):WaitForChild("Active")
 
 local isAttacking = false
-local currentMobList = {}
+local currentMobInstances = {}
 
--- Helper function to extract EntityIds of mobs within range
-local function fetchNearbyEntityIds()
-    local ids = {}
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then
-        return ids
-    end
-
-    local playerPosition = character.HumanoidRootPart.Position
-
-    for _, mob in ipairs(MobsFolder:GetChildren()) do
-        local entityId = mob:GetAttribute("EntityId")
-        
-        -- Get position (works for Models and BaseParts)
-        local mobPosition
-        if mob:IsA("Model") then
-            mobPosition = mob:GetPivot().Position
-        elseif mob:IsA("BasePart") then
-            mobPosition = mob.Position
+-- Helper function to safely extract position from a mob
+local function getMobPosition(mob)
+    if mob:IsA("Model") then
+        if mob.PrimaryPart then
+            return mob.PrimaryPart.Position
         end
-
-        if entityId and mobPosition then
-            local distance = (playerPosition - mobPosition).Magnitude
-            if distance <= MAX_DISTANCE then
-                table.insert(ids, entityId)
-            end
-        end
+        return mob:GetPivot().Position
+    elseif mob:IsA("BasePart") then
+        return mob.Position
     end
-    return ids
+    return nil
 end
 
 -- GUI Setup (Mobile Friendly & Draggable)
@@ -116,24 +98,49 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     end
 end)
 
--- 1-Second Refresh Task to Fetch EntityIds in Range
+-- 1-Second Refresh Task to cache mob instances
 task.spawn(function()
     while true do
         if isAttacking then
-            currentMobList = fetchNearbyEntityIds()
+            currentMobInstances = MobsFolder:GetChildren()
         end
         task.wait(1)
     end
 end)
 
--- Continuous Hit Loop
+-- Continuous Hit Loop (Filters by distance in real-time)
 task.spawn(function()
     while true do
-        if isAttacking and #currentMobList > 0 then
-            local args = {
-                currentMobList
-            }
-            RequestMeleeHits:FireServer(unpack(args))
+        if isAttacking and #currentMobInstances > 0 then
+            local character = LocalPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+            if rootPart then
+                local playerPos = rootPart.Position
+                local nearbyEntityIds = {}
+
+                for _, mob in ipairs(currentMobInstances) do
+                    if mob and mob.Parent then
+                        local entityId = mob:GetAttribute("EntityId")
+                        local mobPos = getMobPosition(mob)
+
+                        if entityId and mobPos then
+                            local distance = (playerPos - mobPos).Magnitude
+                            if distance <= MAX_DISTANCE then
+                                table.insert(nearbyEntityIds, entityId)
+                            end
+                        end
+                    end
+                end
+
+                -- Fire server only if there are valid mobs within distance
+                if #nearbyEntityIds > 0 then
+                    local args = {
+                        nearbyEntityIds
+                    }
+                    RequestMeleeHits:FireServer(unpack(args))
+                end
+            end
         end
         RunService.RenderStepped:Wait()
     end
@@ -146,12 +153,10 @@ ToggleButton.MouseButton1Click:Connect(function()
     if isAttacking then
         ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 220, 50)
         ToggleButton.Text = "AUTO HIT: ON"
-        
-        -- Immediate initial scan upon enabling
-        currentMobList = fetchNearbyEntityIds()
+        currentMobInstances = MobsFolder:GetChildren()
     else
         ToggleButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
         ToggleButton.Text = "AUTO HIT: OFF"
-        currentMobList = {}
+        currentMobInstances = {}
     end
 end)
