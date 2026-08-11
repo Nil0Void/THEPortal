@@ -1,3 +1,6 @@
+-- Configuration
+local MAX_DISTANCE = 50 -- Distance in studs to target mobs
+
 -- Services & Local Variables
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,13 +16,32 @@ local MobsFolder = workspace:WaitForChild("Mobs"):WaitForChild("Active")
 local isAttacking = false
 local currentMobList = {}
 
--- Helper function to extract EntityId attributes
-local function fetchEntityIds()
+-- Helper function to extract EntityIds of mobs within range
+local function fetchNearbyEntityIds()
     local ids = {}
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        return ids
+    end
+
+    local playerPosition = character.HumanoidRootPart.Position
+
     for _, mob in ipairs(MobsFolder:GetChildren()) do
         local entityId = mob:GetAttribute("EntityId")
-        if entityId then
-            table.insert(ids, entityId)
+        
+        -- Get position (works for Models and BaseParts)
+        local mobPosition
+        if mob:IsA("Model") then
+            mobPosition = mob:GetPivot().Position
+        elseif mob:IsA("BasePart") then
+            mobPosition = mob.Position
+        end
+
+        if entityId and mobPosition then
+            local distance = (playerPosition - mobPosition).Magnitude
+            if distance <= MAX_DISTANCE then
+                table.insert(ids, entityId)
+            end
         end
     end
     return ids
@@ -94,11 +116,11 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     end
 end)
 
--- 1-Second Refresh Task to Fetch EntityIds
+-- 1-Second Refresh Task to Fetch EntityIds in Range
 task.spawn(function()
     while true do
         if isAttacking then
-            currentMobList = fetchEntityIds()
+            currentMobList = fetchNearbyEntityIds()
         end
         task.wait(1)
     end
@@ -126,7 +148,7 @@ ToggleButton.MouseButton1Click:Connect(function()
         ToggleButton.Text = "AUTO HIT: ON"
         
         -- Immediate initial scan upon enabling
-        currentMobList = fetchEntityIds()
+        currentMobList = fetchNearbyEntityIds()
     else
         ToggleButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
         ToggleButton.Text = "AUTO HIT: OFF"
