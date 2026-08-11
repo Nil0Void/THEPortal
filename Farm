@@ -1,5 +1,5 @@
 -- Configuration
-local MAX_DISTANCE = 10 -- Distance in studs to target mobs
+local MAX_DISTANCE = 50 -- Distance in studs to target mobs
 
 -- Services & Local Variables
 local Players = game:GetService("Players")
