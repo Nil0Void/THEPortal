@@ -13,6 +13,18 @@ local MobsFolder = workspace:WaitForChild("Mobs"):WaitForChild("Active")
 local isAttacking = false
 local currentMobList = {}
 
+-- Helper function to extract EntityId attributes
+local function fetchEntityIds()
+    local ids = {}
+    for _, mob in ipairs(MobsFolder:GetChildren()) do
+        local entityId = mob:GetAttribute("EntityId")
+        if entityId then
+            table.insert(ids, entityId)
+        end
+    end
+    return ids
+end
+
 -- GUI Setup (Mobile Friendly & Draggable)
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "MobAttackerGui"
@@ -82,21 +94,17 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     end
 end)
 
--- 1-Second Refresh Task to Fetch Mobs
+-- 1-Second Refresh Task to Fetch EntityIds
 task.spawn(function()
     while true do
         if isAttacking then
-            local newList = {}
-            for _, mob in ipairs(MobsFolder:GetChildren()) do
-                table.insert(newList, mob.Name)
-            end
-            currentMobList = newList
+            currentMobList = fetchEntityIds()
         end
         task.wait(1)
     end
 end)
 
--- Continuous Hit Loop (Sends all stacked mob names at once with no delay)
+-- Continuous Hit Loop
 task.spawn(function()
     while true do
         if isAttacking and #currentMobList > 0 then
@@ -118,11 +126,7 @@ ToggleButton.MouseButton1Click:Connect(function()
         ToggleButton.Text = "AUTO HIT: ON"
         
         -- Immediate initial scan upon enabling
-        local initialList = {}
-        for _, mob in ipairs(MobsFolder:GetChildren()) do
-            table.insert(initialList, mob.Name)
-        end
-        currentMobList = initialList
+        currentMobList = fetchEntityIds()
     else
         ToggleButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
         ToggleButton.Text = "AUTO HIT: OFF"
